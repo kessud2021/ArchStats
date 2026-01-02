@@ -24,7 +24,13 @@ if (!fs.existsSync(fontPath)) {
 registerFont(fontPath, { family: "Minecraftia" });
 
 /* ------------------- Discord Client Setup ------------------- */
-const client = new Client({ intents: [GatewayIntentBits.Guilds] });
+const client = new Client({ 
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.MessageContent
+  ]
+});
 
 const GAME_STAT_MAP = {
   bedwars: "wins:bedwars:global:lifetime",
@@ -80,15 +86,20 @@ const commands = [
     )
 ].map(cmd => cmd.toJSON());
 
-const rest = new REST({ version: "10" }).setToken(process.env.BOT_TOKEN);
-(async () => {
+async function registerCommands() {
+  if (!process.env.BOT_TOKEN || !process.env.CLIENT_ID) {
+    console.error("BOT_TOKEN or CLIENT_ID not set, skipping command registration");
+    return;
+  }
+  
   try {
+    const rest = new REST({ version: "10" }).setToken(process.env.BOT_TOKEN);
     await rest.put(Routes.applicationCommands(process.env.CLIENT_ID), { body: commands });
-    console.log("Commands registered");
+    console.log("✓ Commands registered");
   } catch (err) {
     console.error("Failed to register commands:", err.message);
   }
-})();
+}
 
 /* ------------------- Cache Management ------------------- */
 const cache = {};
@@ -447,8 +458,9 @@ async function generateStatsImage(username, playerData, skinURL) {
 }
 
 /* ------------------- Discord Bot ------------------- */
-client.once("ready", () => {
+client.once("ready", async () => {
   console.log(`✓ Bot logged in as ${client.user.tag}`);
+  await registerCommands();
 });
 
 client.on("error", err => {

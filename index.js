@@ -447,8 +447,16 @@ async function generateStatsImage(username, playerData, skinURL) {
 }
 
 /* ------------------- Discord Bot ------------------- */
-client.once("clientReady", () => {
-  console.log(`Logged in as ${client.user.tag}`);
+client.once("ready", () => {
+  console.log(`✓ Bot logged in as ${client.user.tag}`);
+});
+
+client.on("error", err => {
+  console.error("Discord client error:", err);
+});
+
+process.on("unhandledRejection", err => {
+  console.error("Unhandled rejection:", err);
 });
 
 client.on("interactionCreate", async interaction => {
@@ -553,5 +561,15 @@ const server = http.createServer((req, res) => {
 
 server.listen(PORT, () => {
   console.log(`Server listening on port ${PORT}`);
-  client.login(process.env.BOT_TOKEN);
+  
+  if (!process.env.BOT_TOKEN) {
+    console.error("❌ BOT_TOKEN environment variable not set");
+    process.exit(1);
+  }
+  
+  console.log("Attempting to login Discord bot...");
+  client.login(process.env.BOT_TOKEN).catch(err => {
+    console.error("Failed to login:", err.message);
+    process.exit(1);
+  });
 });

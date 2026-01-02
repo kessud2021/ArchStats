@@ -11,7 +11,6 @@ import dotenv from "dotenv";
 import { createCanvas, loadImage, registerFont } from "canvas";
 import path from "path";
 import fs from "fs";
-import http from "http";
 
 dotenv.config();
 
@@ -558,30 +557,10 @@ async function handleLeaderboardCommand(interaction) {
 }
 
 
-/* ------------------- Server Setup ------------------- */
-const PORT = process.env.PORT || 3000;
+if (!process.env.BOT_TOKEN) {
+  console.error("❌ BOT_TOKEN environment variable not set");
+  process.exit(1);
+}
 
-const server = http.createServer((req, res) => {
-  if (req.url === "/health") {
-    res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ status: "ok", uptime: process.uptime() }));
-  } else {
-    res.writeHead(404);
-    res.end("Not Found");
-  }
-});
-
-server.listen(PORT, () => {
-  console.log(`Server listening on port ${PORT}`);
-  
-  if (!process.env.BOT_TOKEN) {
-    console.error("❌ BOT_TOKEN environment variable not set");
-    process.exit(1);
-  }
-  
-  console.log("Attempting to login Discord bot...");
-  client.login(process.env.BOT_TOKEN).catch(err => {
-    console.error("Failed to login:", err.message);
-    process.exit(1);
-  });
-});
+console.log("Starting bot...");
+client.login(process.env.BOT_TOKEN);

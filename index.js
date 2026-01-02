@@ -1,4 +1,4 @@
-  import {
+import {
   Client,
   GatewayIntentBits,
   REST,
@@ -11,18 +11,7 @@ import dotenv from "dotenv";
 import { createCanvas, loadImage, registerFont } from "canvas";
 import path from "path";
 import fs from "fs";
-import express from "express";
-
-const app = express();
-const PORT = process.env.PORT || 3000;
-
-app.get("/", (req, res) => {
-  res.send("Bot is alive!");
-});
-
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+import http from "http";
 
 dotenv.config();
 
@@ -473,85 +462,96 @@ client.on("interactionCreate", async interaction => {
 });
 
 async function handleStatsCommand(interaction) {
-  // Handle async processing without early returns
-  (async () => {
-    const username = interaction.options.getString("player");
+  const username = interaction.options.getString("player");
 
-    if (!username || username.length > 16 || username.length < 3) {
-      await interaction.reply("Username must be 3-16 characters.");
+  if (!username || username.length > 16 || username.length < 3) {
+    await interaction.reply("Username must be 3-16 characters.");
+    return;
+  }
+
+  try {
+    await interaction.deferReply();
+
+    const [playerData, skinURL] = await Promise.all([
+      getPlayerStats(username),
+      getMinecraftSkin(username)
+    ]);
+
+    if (!playerData || !playerData.statistics || Object.keys(playerData.statistics).length === 0) {
+      await interaction.editReply(`No stats found for **${username}**.`);
       return;
     }
 
+    const buffer = await generateStatsImage(username, playerData, skinURL);
+    const attachment = new AttachmentBuilder(buffer, { name: "stats.png" });
+    await interaction.editReply({ files: [attachment] });
+  } catch (err) {
+    console.error(`Stats error for ${username}: ${err.message}`);
     try {
-      // Defer immediately to extend timeout to 15 minutes
-      await interaction.deferReply();
-
-      const [playerData, skinURL] = await Promise.all([
-        getPlayerStats(username),
-        getMinecraftSkin(username)
-      ]);
-
-      if (!playerData || !playerData.statistics || Object.keys(playerData.statistics).length === 0) {
-        await interaction.editReply(`No stats found for **${username}**.`);
-        return;
+      if (interaction.deferred || interaction.replied) {
+        await interaction.editReply(`Error: ${err.message.substring(0, 80)}`);
+      } else {
+        await interaction.reply(`Error: ${err.message.substring(0, 80)}`);
       }
-
-      const buffer = await generateStatsImage(username, playerData, skinURL);
-      const attachment = new AttachmentBuilder(buffer, { name: "stats.png" });
-      await interaction.editReply({ files: [attachment] });
-    } catch (err) {
-      console.error(`Stats error for ${username}: ${err.message}`);
-      try {
-        if (interaction.deferred || interaction.replied) {
-          await interaction.editReply(`Error: ${err.message.substring(0, 80)}`);
-        } else {
-          await interaction.reply(`Error: ${err.message.substring(0, 80)}`);
-        }
-      } catch (replyErr) {
-        console.error(`Reply error: ${replyErr.message}`);
-      }
+    } catch (replyErr) {
+      console.error(`Reply error: ${replyErr.message}`);
     }
-  })();
+  }
 }
 
 async function handleLeaderboardCommand(interaction) {
-  (async () => {
-    const game = interaction.options.getString("game");
+  const game = interaction.options.getString("game");
 
-    if (!GAME_STAT_MAP[game]) {
-      await interaction.reply(`Unknown game: ${game}`);
+  if (!GAME_STAT_MAP[game]) {
+    await interaction.reply(`Unknown game: ${game}`);
+    return;
+  }
+
+  try {
+    await interaction.deferReply();
+
+    const statId = GAME_STAT_MAP[game];
+    const leaderboardData = await getLeaderboard(statId, 0, 10);
+
+    if (!leaderboardData || !leaderboardData.entries) {
+      await interaction.editReply(`No leaderboard data found for **${game}**.`);
       return;
     }
 
+    const gameName = game.charAt(0).toUpperCase() + game.slice(1);
+    const buffer = await generateLeaderboardImage(gameName, leaderboardData);
+    const attachment = new AttachmentBuilder(buffer, { name: "leaderboard.png" });
+
+    await interaction.editReply({ files: [attachment] });
+  } catch (err) {
+    console.error(`Leaderboard error for ${game}: ${err.message}`);
     try {
-      await interaction.deferReply();
-
-      const statId = GAME_STAT_MAP[game];
-      const leaderboardData = await getLeaderboard(statId, 0, 10);
-
-      if (!leaderboardData || !leaderboardData.entries) {
-        await interaction.editReply(`No leaderboard data found for **${game}**.`);
-        return;
+      if (interaction.deferred || interaction.replied) {
+        await interaction.editReply(`Error: ${err.message.substring(0, 80)}`);
+      } else {
+        await interaction.reply(`Error: ${err.message.substring(0, 80)}`);
       }
-
-      const gameName = game.charAt(0).toUpperCase() + game.slice(1);
-      const buffer = await generateLeaderboardImage(gameName, leaderboardData);
-      const attachment = new AttachmentBuilder(buffer, { name: "leaderboard.png" });
-
-      await interaction.editReply({ files: [attachment] });
-    } catch (err) {
-      console.error(`Leaderboard error for ${game}: ${err.message}`);
-      try {
-        if (interaction.deferred || interaction.replied) {
-          await interaction.editReply(`Error: ${err.message.substring(0, 80)}`);
-        } else {
-          await interaction.reply(`Error: ${err.message.substring(0, 80)}`);
-        }
-      } catch (replyErr) {
-        console.error(`Reply error: ${replyErr.message}`);
-      }
+    } catch (replyErr) {
+      console.error(`Reply error: ${replyErr.message}`);
     }
-  })();
+  }
 }
 
-client.login(process.env.BOT_TOKEN);
+
+/* ------------------- Server Setup ------------------- */
+const PORT = process.env.PORT || 3000;
+
+const server = http.createServer((req, res) => {
+  if (req.url === "/health") {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ status: "ok", uptime: process.uptime() }));
+  } else {
+    res.writeHead(404);
+    res.end("Not Found");
+  }
+});
+
+server.listen(PORT, () => {
+  console.log(`Server listening on port ${PORT}`);
+  client.login(process.env.BOT_TOKEN);
+});

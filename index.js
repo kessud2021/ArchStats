@@ -1,4 +1,4 @@
-import {
+  import {
   Client,
   GatewayIntentBits,
   REST,
@@ -11,6 +11,18 @@ import dotenv from "dotenv";
 import { createCanvas, loadImage, registerFont } from "canvas";
 import path from "path";
 import fs from "fs";
+import express from "express";
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+app.get("/", (req, res) => {
+  res.send("Bot is alive!");
+});
+
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
 
 dotenv.config();
 
